@@ -1,0 +1,66 @@
+services:
+  ledger:
+    build: .
+    image: pocket-ledger:latest
+    container_name: ledger
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATA_DIR: /app/data
+      TRUST_PROXY: "1"
+      PLAID_CLIENT_ID: ${PLAID_CLIENT_ID:-}
+      PLAID_SECRET: ${PLAID_SECRET:-}
+      PLAID_ENV: ${PLAID_ENV:-sandbox}
+      OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - ledger-data:/app/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/status').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # Optional local language model. Run with --profile ai and set OLLAMA_MODEL in .env.
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ledger-ollama
+    profiles: ["ai"]
+    restart: unless-stopped
+    volumes:
+      - ollama-data:/root/.ollama
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  # Optional Cloudflare Tunnel connector. Set TUNNEL_TOKEN in .env, then run with --profile cloudflare.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: ledger-cloudflared
+    profiles: ["cloudflare"]
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN:-}
+    depends_on:
+      ledger:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  ledger-data:
+  ollama-data:
